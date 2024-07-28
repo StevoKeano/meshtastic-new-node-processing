@@ -111,10 +111,11 @@ def issue_traceroute(node_id):
 
 def main():
     """Main function to fetch nodes, check for new ones, and run traceroute."""
-    current_nodes = get_nodes()
-    existing_nodes = load_existing_nodes()
-    traceroute_log_nodes = load_traceroute_log_nodes()
     while True:
+        current_nodes = get_nodes()
+        existing_nodes = load_existing_nodes()
+        traceroute_log_nodes = load_traceroute_log_nodes()
+
         for node_id in current_nodes:
             if node_id in traceroute_log_nodes:
                 print(f"Skipping node {node_id} as it's already in the traceroute log.")
