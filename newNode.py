@@ -1,3 +1,4 @@
+import time
 import subprocess
 import os
 import re
@@ -13,9 +14,6 @@ def get_nodes():
     try:
         command = f'python3 -m meshtastic --port {PORT} --info'
         result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-        
-        # Print the command output for debugging
-        print("Command Output:", result.stdout)  
         
         # Regular expression to find node IDs
         nodes = {}
@@ -38,6 +36,37 @@ def load_existing_nodes():
         with open(NODE_FILE, 'r') as f:
             return {line.strip() for line in f if line.strip()}
     return set()
+
+def load_traceroute_log_nodes():
+    """Load node IDs from the traceroute log file."""
+    if os.path.exists(LOG_FILE):
+        logged_nodes = set()
+        with open(LOG_FILE, 'r') as f:
+            for line in f:
+                #print(len(line.split()))
+                # Check for successful log entries
+                if 'Traceroute output for' in line:
+                   # print('# Extract node ID from successful log')
+                   # print(line)
+                    logged_node = line.split()[6].rstrip(':')  # Successful log format
+                    logged_nodes.add(logged_node)
+                # Check for unsuccessful log entries
+                elif len(line.split()) > 3 and line.split()[3].startswith('!'):
+                    # Extract node ID from unsuccessful log')
+                    logged_node = line.split()[3]  # Unsuccessful log format                    
+                    logged_nodes.add(logged_node)
+        return logged_nodes
+    return set()
+
+def token_exists_in_log(token, log_file='traceroute_log.txt'):
+    """Check if the given token exists in the traceroute log file."""
+    if os.path.exists(log_file):
+        with open(log_file, 'r') as f:
+            for line in f:
+                # Check for the token in both successful and unsuccessful log formats
+                if token in line:
+                    return False  # Token exists, return False
+    return True  # Token does not exist, return True
 
 def save_node(node_id):
     """Save a new node ID to the node file."""
@@ -84,15 +113,21 @@ def main():
     """Main function to fetch nodes, check for new ones, and run traceroute."""
     current_nodes = get_nodes()
     existing_nodes = load_existing_nodes()
-
-    for node_id in current_nodes:
-        if node_id not in existing_nodes:
-            print(f"New node detected: {node_id}")
-            # Run traceroute and check success
-            traceroute_successful = issue_traceroute(node_id)
-            if traceroute_successful:
-                save_node(node_id)  # Only save the node if traceroute was successful
-
+    traceroute_log_nodes = load_traceroute_log_nodes()
+    while True:
+        for node_id in current_nodes:
+            if node_id in traceroute_log_nodes:
+                print(f"Skipping node {node_id} as it's already in the traceroute log.")
+            elif node_id not in existing_nodes:
+                print(f"New node detected: {node_id}")
+                # Run traceroute and check success
+                traceroute_successful = issue_traceroute(node_id)
+                if traceroute_successful:
+                    save_node(node_id)  # Only save the node if traceroute was successful
+        print('sleep 180 seconds from ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')  )
+        # Sleep for 3 minutes (180 seconds)
+        time.sleep(180)
+    
 if __name__ == "__main__":
     main()
 
