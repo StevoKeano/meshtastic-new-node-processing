@@ -4,18 +4,22 @@ import serial
 import serial.tools.list_ports
 import shutil  # Add this import
 import time
+from datetime import datetime, timedelta
 import subprocess
 import os
 import re
-from datetime import datetime
 import meshtastic
+
 from meshtastic.serial_interface import SerialInterface
 from meshtastic_utils import find_meshtastic_port
 
 
 # Configuration
-port = '/dev/ttyACM0'  # Update this to your actual port
-python_executable = "python"
+yourInviteString = "https://discord.gg/cpDFj345"  # Update this or you'll be sending MY NAME to everyone!'
+
+port = '/dev/ttyACM0'  # I do a port check once per execution to Update this to your actual port
+python_executable = "python"  # I also check what python you are at and update this
+
 NODE_FILE = 'nodes.txt'  # File to store node IDs
 LOG_FILE = 'traceroute_log.txt'  # File to log traceroute output
 
@@ -141,14 +145,14 @@ def token_exists_in_log(token, log_file='traceroute_log.txt'):
 def save_node(node_id):
     """Save a new node ID to the node file."""
     with open(NODE_FILE, 'a') as f:
-        f.write(f"{node_id}\r\n")  # CRLF at end of line
+        f.write(f"{node_id}\r")  # CRLF at end of line
 
 def issue_traceroute(node_id):
     """Run traceroute on the new node and log the output."""
     global python_executable
     try:
         command = [sys.executable, '-m', 'meshtastic', '--traceroute', node_id]
-
+        print(f'Sending traceroute request to {node_id}  (this could take a while)')
         result = subprocess.run(command, check=True, capture_output=True, text=True)
         print(result.stdout)
 
@@ -165,7 +169,7 @@ def issue_traceroute(node_id):
             log_entry = f"{timestamp} - Traceroute output for {node_id}: {traceroute_line}"
             print(log_entry)  # Print to the screen
             with open(LOG_FILE, 'a') as log_file:
-                log_file.write(f"{log_entry}")  # \r\n  Log the entry with timestamp
+                log_file.write(f"{log_entry}\r")  # \r\n  Log the entry with timestamp
             return True  # Indicate success
         else:
             print(f"No valid traceroute output for {node_id}.")
@@ -177,7 +181,7 @@ def issue_traceroute(node_id):
         error_message = f"{timestamp} - {node_id} {e.stderr.strip()}"
         print(f"Error running traceroute for {node_id}: {error_message}")  # Print the error output
         with open(LOG_FILE, 'a') as log_file:
-            log_file.write(f"{error_message}")  # \r\n Log the error message with timestamp
+            log_file.write(f"{error_message}\r")  # \r\n Log the error message with timestamp
         return False  # Indicate failure
 
 
@@ -208,7 +212,7 @@ def main():
                     traceroute_successful = issue_traceroute(node_id)
                     if traceroute_successful:
                         save_node(node_id)  # Only save the node if traceroute was successful
-                        sendMsg("Contact us on Austinmesh.org or discord 'Austinmesh'")
+                        sendMsg(f"Welcome to the mesh! Join us on the AustinMesh discord chat:{yourInviteString}")
             print('sleep 180 seconds from ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')  )
             # Sleep for 3 minutes (180 seconds)
             time.sleep(180)

@@ -1,27 +1,8 @@
-'''
-Meshtastic CLI and Python library work on Linux as well. The core functionality is cross-platform and supports Windows, macOS, and Linux. 
-
-Here are a few key points about using Meshtastic on Linux:
-
-Installation: You can install the Meshtastic Python package on Linux using pip:
-
-pip install meshtastic
-
-Serial port access: On Linux, serial ports are typically named like /dev/ttyUSB0 or /dev/ttyACM0.
-You may need to add your user to the dialout group to access these ports without sudo:
-
-sudo usermod -a -G dialout $USER
-
-Command usage: The CLI commands work the same way on Linux as they do on other platforms. For example:
-
-meshtastic --port /dev/ttyUSB0 --info
-'''
-
-
-
 import subprocess
 import serial.tools.list_ports
 import sys
+import json
+from datetime import datetime, timedelta
 
 def find_meshtastic_port():
     ports = sorted(serial.tools.list_ports.comports(), key=lambda x: x.device, reverse=True)
@@ -60,9 +41,17 @@ def check_meshtastic_port(port):
         print(f"Unexpected error on {port}: {e}")
     return False
 
-if __name__ == "__main__":
-    port = find_meshtastic_port()
-    if port:
-        print(f"The active Meshtastic port is: {port}")
-    else:
-        print("No Meshtastic device found")
+def get_nodes_info():
+    """Get the list of nodes and their info using Meshtastic CLI."""
+    global port
+    command = [sys.executable, '-m', 'meshtastic', '--port', port, '--info']
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        return json.loads(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running info command: {e}")
+        print(f"Command output: {e.stderr}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON output: {e}")
+        return None
