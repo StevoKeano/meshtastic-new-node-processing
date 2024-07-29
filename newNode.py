@@ -1,18 +1,88 @@
+import sys
+import platform
+import serial
+import serial.tools.list_ports
+import shutil  # Add this import
 import time
 import subprocess
 import os
 import re
 from datetime import datetime
+import meshtastic
+from meshtastic.serial_interface import SerialInterface
+from meshtastic_utils import find_meshtastic_port
+
 
 # Configuration
-PORT = '/dev/ttyACM0'  # Update this to your actual port
+port = '/dev/ttyACM0'  # Update this to your actual port
+python_executable = "python"
 NODE_FILE = 'nodes.txt'  # File to store node IDs
 LOG_FILE = 'traceroute_log.txt'  # File to log traceroute output
+
+import sys
+import subprocess
+
+def get_python_command():
+    # Get the version info
+    version_info = sys.version_info
+
+    # Check if we're running under Python 2 or Python 3
+    if version_info.major == 3:
+        python_command = 'python3'
+    else:
+        python_command = 'python'
+
+    # Verify the command exists
+    if shutil.which(python_command) is None:
+        # If the default doesn't exist, try the alternative
+        alternative = 'python' if python_command == 'python3' else 'python3'
+        if shutil.which(alternative) is not None:
+            python_command = alternative
+        else:
+            print("Unable to determine Python command. Defaulting to 'python'")
+            python_command = 'python'
+
+    return python_command
+
+
+def sendMsg(msg: str) -> None:
+    """
+    Send a message via Meshtastic.
+
+    Args:
+    msg (str): The message to send.
+
+    Returns:
+    None
+    """
+    try:
+        # Connect to the Meshtastic device
+        interface = SerialInterface()
+
+        # Send the text message
+        interface.sendText(msg)
+
+        print(f"Message sent: {msg}")
+
+    except Exception as e:
+        print(f"Error sending message: {e}")
+
+    finally:
+        # Close the interface
+        if 'interface' in locals():
+            interface.close()
+
+
 
 def get_nodes():
     """Fetch the current node list from the Meshtastic device."""
     try:
-        command = f'python3 -m meshtastic --port {PORT} --info'
+        global python_executable
+           # Store the result in a variable
+        python_executable = get_python_command()
+      
+        
+        command = f'{python_executable} -m meshtastic --port {port} --info'
         result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
         
         # Regular expression to find node IDs
@@ -75,11 +145,12 @@ def save_node(node_id):
 
 def issue_traceroute(node_id):
     """Run traceroute on the new node and log the output."""
+    global python_executable
     try:
-        command = f"python3 -m meshtastic --traceroute '{node_id}'"
-        
-        # Using subprocess.run with shell=True to execute the command
-        result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+        command = [sys.executable, '-m', 'meshtastic', '--traceroute', node_id]
+
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        print(result.stdout)
 
         # Extract the relevant traceroute line
         traceroute_line = None
@@ -94,7 +165,7 @@ def issue_traceroute(node_id):
             log_entry = f"{timestamp} - Traceroute output for {node_id}: {traceroute_line}"
             print(log_entry)  # Print to the screen
             with open(LOG_FILE, 'a') as log_file:
-                log_file.write(f"{log_entry}\r\n")  # Log the entry with timestamp
+                log_file.write(f"{log_entry}")  # \r\n  Log the entry with timestamp
             return True  # Indicate success
         else:
             print(f"No valid traceroute output for {node_id}.")
@@ -106,28 +177,41 @@ def issue_traceroute(node_id):
         error_message = f"{timestamp} - {node_id} {e.stderr.strip()}"
         print(f"Error running traceroute for {node_id}: {error_message}")  # Print the error output
         with open(LOG_FILE, 'a') as log_file:
-            log_file.write(f"{error_message}\r\n")  # Log the error message with timestamp
+            log_file.write(f"{error_message}")  # \r\n Log the error message with timestamp
         return False  # Indicate failure
 
-def main():
-    """Main function to fetch nodes, check for new ones, and run traceroute."""
-    while True:
-        current_nodes = get_nodes()
-        existing_nodes = load_existing_nodes()
-        traceroute_log_nodes = load_traceroute_log_nodes()
 
-        for node_id in current_nodes:
-            if node_id in traceroute_log_nodes:
-                print(f"Skipping node {node_id} as it's already in the traceroute log.")
-            elif node_id not in existing_nodes:
-                print(f"New node detected: {node_id}")
-                # Run traceroute and check success
-                traceroute_successful = issue_traceroute(node_id)
-                if traceroute_successful:
-                    save_node(node_id)  # Only save the node if traceroute was successful
-        print('sleep 180 seconds from ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')  )
-        # Sleep for 3 minutes (180 seconds)
-        time.sleep(180)
+
+def main():
+          """Main function to fetch nodes, check for new ones, and run traceroute."""
+          global port  # Declare that we are using the global variable
+          port = find_meshtastic_port()
+    
+          if port is None:
+             print("No Meshtastic device found. Please check the connection.")
+             return None
+
+          print(f"Meshtastic device found on port: {port}")
+            
+          while True: 
+
+            current_nodes = get_nodes()
+            existing_nodes = load_existing_nodes()
+            traceroute_log_nodes = load_traceroute_log_nodes()
+
+            for node_id in current_nodes:
+                if node_id in traceroute_log_nodes:
+                    print(f"Skipping node {node_id} as it's already in the traceroute log.")
+                elif node_id not in existing_nodes:
+                    print(f"New node detected: {node_id}")
+                    # Run traceroute and check success
+                    traceroute_successful = issue_traceroute(node_id)
+                    if traceroute_successful:
+                        save_node(node_id)  # Only save the node if traceroute was successful
+                        sendMsg("Contact us on Austinmesh.org or discord 'Austinmesh'")
+            print('sleep 180 seconds from ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')  )
+            # Sleep for 3 minutes (180 seconds)
+            time.sleep(180)
     
 if __name__ == "__main__":
     main()
