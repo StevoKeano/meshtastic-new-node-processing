@@ -1,4 +1,5 @@
-attempt to get traceroute on new meshtastic nodes before they disappear! 
+Send a welcome message and run traceroute on new meshtastic nodes before they disappear! requires USB connected meshtastic radio.
 see log files after execution.
 
-python3 newNode.py
+download the lot and run 
+>python3 newNode.py
