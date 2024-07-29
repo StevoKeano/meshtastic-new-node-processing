@@ -16,7 +16,9 @@ from meshtastic_utils import find_meshtastic_port
 
 # Configuration
 yourInviteString = "https://discord.gg/cpDFj345"  # Update this or you'll be sending MY NAME to everyone!'
+welcomeMsg = "Welcome to the mesh! Join us on the AustinMesh discord chat:"
 
+sleepSeconds = 181  #set as needed...
 port = '/dev/ttyACM0'  # I do a port check once per execution to Update this to your actual port
 python_executable = "python"  # I also check what python you are at and update this
 
@@ -132,16 +134,6 @@ def load_traceroute_log_nodes():
         return logged_nodes
     return set()
 
-def token_exists_in_log(token, log_file='traceroute_log.txt'):
-    """Check if the given token exists in the traceroute log file."""
-    if os.path.exists(log_file):
-        with open(log_file, 'r') as f:
-            for line in f:
-                # Check for the token in both successful and unsuccessful log formats
-                if token in line:
-                    return False  # Token exists, return False
-    return True  # Token does not exist, return True
-
 def save_node(node_id):
     """Save a new node ID to the node file."""
     with open(NODE_FILE, 'a') as f:
@@ -212,10 +204,10 @@ def main():
                     traceroute_successful = issue_traceroute(node_id)
                     if traceroute_successful:
                         save_node(node_id)  # Only save the node if traceroute was successful
-                        sendMsg(f"Welcome to the mesh! Join us on the AustinMesh discord chat:{yourInviteString}")
-            print('sleep 180 seconds from ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')  )
+                        sendMsg(f"{welcomeMsg}{yourInviteString}")
+            print(f'sleep {sleepSeconds} seconds from ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S')  )
             # Sleep for 3 minutes (180 seconds)
-            time.sleep(180)
+            time.sleep(sleepSeconds)
     
 if __name__ == "__main__":
     main()
