@@ -5,6 +5,7 @@ download the lot and run below command.
 
 ======================== o u t p u t ====================================
 D:\dev\python\mesh>python newNode.py
+
 Is the Meshtastic device connected via USB (C) or IP (I)? c
 Scanning for Meshtastic device...
 
