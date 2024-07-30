@@ -118,6 +118,8 @@ def main():
             for node in nodes_info.get("nodes", []):
                 node_id = node.get("id")
                 last_heard = node.get("lastHeard")
+                user = node.get("user")
+                deviceMetrics = node.get("deviceMetrics")
                 
                 if last_heard:
                     last_heard_time = datetime.fromtimestamp(last_heard)
@@ -131,13 +133,13 @@ def main():
                         elif node_id not in existing_nodes:
                             print(f"New node detected: {node_id}")
                             if port.startswith('--host'):                            
-                                    save_node(node_id)  # Only save the node if remote IP device
+                                    save_node(node_id, last_heard, user, deviceMetrics,current_time.strftime("%Y-%m-%d %H:%M:%S"))  # Only save the node if remote IP device
                                     sendMsg(node_id, f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yourInviteString}",connection_string)
                             else:
                                 # Run traceroute and check success  
                                 traceroute_successful = issue_traceroute(node_id,connection_string)
                                 if traceroute_successful:
-                                   save_node(node_id)  # Only save the node if traceroute was successful
+                                   save_node(node_id, last_heard, user, deviceMetrics,current_time.strftime("%Y-%m-%d %H:%M:%S"))  # Only save the node if traceroute was successful
                                    sendMsg(node_id, f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yourInviteString}",connection_string)
                     else:
                         print(f"Skipping node {node_id} as it hasn't been heard from in over 2 hours.")

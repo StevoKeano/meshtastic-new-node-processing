@@ -6,7 +6,6 @@ import os
 
 from datetime import datetime, timedelta
 
-
 timeoutSeconds = 10
 NODE_FILE = 'nodes.txt'  # File to store node IDs
 LOG_FILE = 'traceroute_log.txt'  # File to log traceroute output
@@ -53,14 +52,24 @@ def sendMsg(node_id, message, connection_string):
         print(f"Error sending message to {node_id}: {e}")
         print(f"Command output: {e.stderr}")
 
-
+#def load_existing_nodes():
+ #   """Load existing node IDs from the node file."""
+  #  if os.path.exists(NODE_FILE):
+   #     with open(NODE_FILE, 'r') as f:
+    #        return {line.strip() for line in f if line.strip()}
+    #return set()
 
 def load_existing_nodes():
     """Load existing node IDs from the node file."""
+    nodes = set()
     if os.path.exists(NODE_FILE):
         with open(NODE_FILE, 'r') as f:
-            return {line.strip() for line in f if line.strip()}
-    return set()
+            for line in f:
+                line = line.strip()
+                if line:
+                    node_id, *rest = line.split(',')
+                    nodes.add(node_id)
+    return nodes
 
 def load_traceroute_log_nodes():
     """Load node IDs from the traceroute log file."""
@@ -83,10 +92,17 @@ def load_traceroute_log_nodes():
         return logged_nodes
     return set()
 
-def save_node(node_id):
-    """Save a new node ID to the node file."""
+#def save_node(node_id):
+ #   """Save a new node ID to the node file."""
+  #  with open(NODE_FILE, 'a') as f:
+   #     f.write(f"{node_id}\r")  # CRLF at end of line
+
+def save_node(node_id, last_heard=None, user=None, device_metrics=None, seenTime=None):
+    """Save a new node ID along with lastHeard, user, and deviceMetrics to the node file."""
+    # Prepare the output line with the provided data
+    output_line = f"{node_id},{last_heard},{user},{device_metrics},{seenTime}\r"  # CRLF at end of line
     with open(NODE_FILE, 'a') as f:
-        f.write(f"{node_id}\r")  # CRLF at end of line
+        f.write(output_line)
 
 def issue_traceroute(node_id, connection_string):
     """Run traceroute on the new node and log the output."""
@@ -127,9 +143,6 @@ def issue_traceroute(node_id, connection_string):
         with open(LOG_FILE, 'a') as log_file:
             log_file.write(f"{error_message}\n")  # Log the error message with timestamp
         return False  # Indicate failure
-
-
-
 
 def find_meshtastic_port():
     ports = sorted(serial.tools.list_ports.comports(), key=lambda x: x.device, reverse=True)
