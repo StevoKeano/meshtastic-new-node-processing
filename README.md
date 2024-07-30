@@ -1,5 +1,5 @@
 Send a welcome message and run traceroute on new meshtastic nodes before they disappear! (traceroute requires USB connected meshtastic radio).
-see log files after execution.
+see log files after execution.  SEE SETUP FOR PYTHON, PIP AND MESHTASTIC install...
 
 download the lot and run below command.  
 
