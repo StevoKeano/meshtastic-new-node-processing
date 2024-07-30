@@ -30,7 +30,9 @@ Sending text message Welcome to the mesh! Join us on the AustinMesh discord chat
 Node !1c498944 last heard 0.08 hours ago
 New node detected: !1c498944
 Sending traceroute request to !1c498944 (this could take a while)
-2024-07-29 17:11:40 - Traceroute output for !1c498944: !06e2718a --> !1c498944
+2024-07-29 17:11:40 - Traceroute output for !1c498944: !06e2718a --> !1c49894
+
+4
 Connected to radio
 Sending text message Welcome to the mesh! Join us on the AustinMesh discord chat: https://discord.gg/cpDFj345 to !1c498944 on channelIndex:0
 
