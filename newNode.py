@@ -13,6 +13,7 @@ import re
 import meshtastic
 import webbrowser
 import pygetwindow as gw
+import argparse
 
 from meshtastic.serial_interface import SerialInterface
 from K3ANO_NewNodes.meshtastic_utils import find_meshtastic_port, get_nodes_info, load_existing_nodes, load_traceroute_log_nodes, issue_traceroute, save_node, sendMsg, update_welcome_message, load_settings
@@ -23,15 +24,48 @@ welcomeMsg =  f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yo
 NODE_FILE = 'nodes.txt'  # File to store node IDs
 LOG_FILE = 'traceroute_log.txt'  # File to log traceroute output
 sleepSeconds = 60  #set as needed...
-port = '/dev/ttyACM0'  # I do a port check once per execution to Update this to your actual port
+port = ''   #'/dev/ttyACM0'  # I do a port check once per execution to Update this to your actual port
 python_executable = "python"  # I also check what python you are at and update this
 input_active = True
 countdown_active = True
 
 remaining_time = 0
 
-import sys
-import subprocess
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Radio connection setup")
+    
+    # Add arguments
+    parser.add_argument("--p", nargs=2, metavar=("type", "value"), help="Port connection type and value. Ex --p c COM9 OR --p c /dev/ttyACM0 or --p i 192.168.1.87")
+    parser.add_argument("--m", action="store_true", help="Use message from settings.json file")
+    parser.add_argument("--v", action="store_true", help="Enable verbose debug mode")
+
+    # Parse arguments
+    args = parser.parse_args()
+
+    # Initialize variables
+    port = None
+    verbose = False
+    useSettingsMsg = False
+
+    # Process arguments
+    if args.p:
+        connection_type, connection_value = args.p
+        if connection_type == "i":
+            port = f"--host {connection_value}"
+        elif connection_type == "c":
+            port = connection_value
+        else:
+            print(f"Invalid connection type: {connection_type}")
+            sys.exit(1)
+
+    if args.m:
+        useSettingsMsg = True
+
+    if args.v:
+        verbose = True
+
+    return port, verbose, useSettingsMsg
+
 
 def get_python_command():
     # Get the version info
@@ -147,39 +181,50 @@ def sleep_and_prompt(sleep_duration):
             print(f"\nSleep time of {sleep_duration} seconds is up. You can continue using the program.")
 
 def main():
-    sleep_seconds = sleepSeconds
-    global welcomeMsg, NODE_FILE, LOG_FILE, input_active, countdown_active
+    global port,welcomeMsg, NODE_FILE, LOG_FILE, input_active, countdown_active
 
-    settings = load_settings()
-    welcome_message = settings.get('welcome_message', welcomeMsg)
-    print(f"Using:  {welcome_message}")
-    change = input("Do you want to change the above welcome message? (y/n): ").strip().lower()
-    update_welcome_message(change)
-    settings = load_settings()
-    welcome_message = settings.get('welcome_message', welcomeMsg)
+    port, verbose, useSettingsMsg = parse_arguments()
+    # Print results
+    print(f"Port: {port}")
+    print(f"Verbose: {verbose}")
+
+    sleep_seconds = sleepSeconds
+
+    if useSettingsMsg==False:
+        # manage welcome message
+        settings = load_settings()
+        welcome_message = settings.get('welcome_message', welcomeMsg)
+        print(f"Using:  {welcome_message}")
+        change = input("Do you want to change the above welcome message? (y/n): ").strip().lower()
+        update_welcome_message(change)
+        settings = load_settings()
+        welcome_message = settings.get('welcome_message', welcomeMsg)
+    else:
+        settings = load_settings()
+        welcome_message = settings.get('welcome_message', welcomeMsg)
+        print(f"Using:  {welcome_message}")
 
     """Main function to fetch nodes, check for new ones, and run traceroute."""
-    global port  # Declare that we are using the global variable
+    if port == '':
+        # Ask the user for the connection type ?
+        connection_type = input("Is the Meshtastic device connected via USB (C) or IP (I)? ").strip().lower()
+    #    connection_type = input("Is the Meshtastic device connected via USB (C) or IP (I) or IP --traceroute (ITR)? ").strip().lower()
 
-        # Ask the user for the connection type
-    connection_type = input("Is the Meshtastic device connected via USB (C) or IP (I)? ").strip().lower()
-#    connection_type = input("Is the Meshtastic device connected via USB (C) or IP (I) or IP --traceroute (ITR)? ").strip().lower()
+        if connection_type == 'c':
+            port = find_meshtastic_port()  # This will find the COM port
+        elif connection_type == 'i':
+            ip_address = input("Enter the IP address of the Meshtastic device: ")
+            port = f"--host {ip_address}"  # Set the port to the IP address
+        elif connection_type == 'itr':
+            ip_address = input("Enter the IP address of the Meshtastic device: ")
+            port = f"--host {ip_address}"  # Set the port to the IP address
+        else:
+            print("Invalid input. Please enter 'C' for USB or 'I' for IP.")
+            return None
 
-    if connection_type == 'c':
-        port = find_meshtastic_port()  # This will find the COM port
-    elif connection_type == 'i':
-        ip_address = input("Enter the IP address of the Meshtastic device: ")
-        port = f"--host {ip_address}"  # Set the port to the IP address
-    elif connection_type == 'itr':
-        ip_address = input("Enter the IP address of the Meshtastic device: ")
-        port = f"--host {ip_address}"  # Set the port to the IP address
-    else:
-        print("Invalid input. Please enter 'C' for USB or 'I' for IP.")
-        return None
-
-    if port is None:
-        print("No Meshtastic device found. Please check the connection.")
-        return None
+        if port is None:
+            print("No Meshtastic device found. Please check the connection.")
+            return None
 
     print(f"Meshtastic device found?: {port}")
 
