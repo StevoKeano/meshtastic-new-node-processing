@@ -1,28 +1,34 @@
+import keyboard
 import sys
 import platform
 import serial
 import serial.tools.list_ports
 import shutil  # Add this import
 import time
+import threading
 from datetime import datetime, timedelta
 import subprocess
 import os
 import re
 import meshtastic
+import webbrowser
+import pygetwindow as gw
 
 from meshtastic.serial_interface import SerialInterface
-from meshtastic_utils import find_meshtastic_port, get_nodes_info, load_existing_nodes, load_traceroute_log_nodes, issue_traceroute, save_node, sendMsg
-
-
-
+from K3ANO_NewNodes.meshtastic_utils import find_meshtastic_port, get_nodes_info, load_existing_nodes, load_traceroute_log_nodes, issue_traceroute, save_node, sendMsg, update_welcome_message, load_settings
+#from K3ANO_NewNodes.meshtastic_utils import find_meshtastic_port, get_nodes_info, load_existing_nodes, load_traceroute_log_nodes, issue_traceroute, save_node, sendMsg, update_welcome_message, load_settings
 # Configuration
 yourInviteString = "https://discord.gg/cpDFj345"  # Update this or you'll be sending MY NAME to everyone!'
-welcomeMsg = "Welcome to the mesh! Join us on the AustinMesh discord chat:"
-
-sleepSeconds = 181  #set as needed...
+welcomeMsg =  f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yourInviteString}" # default value...
+NODE_FILE = 'nodes.txt'  # File to store node IDs
+LOG_FILE = 'traceroute_log.txt'  # File to log traceroute output
+sleepSeconds = 60  #set as needed...
 port = '/dev/ttyACM0'  # I do a port check once per execution to Update this to your actual port
 python_executable = "python"  # I also check what python you are at and update this
+input_active = True
+countdown_active = True
 
+remaining_time = 0
 
 import sys
 import subprocess
@@ -54,8 +60,7 @@ def get_nodes():
     try:
         global python_executable
            # Store the result in a variable
-        python_executable = get_python_command()
-      
+        python_executable = get_python_command()      
         
         command = f'{python_executable} -m meshtastic --port {port} --info'
         result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
@@ -75,16 +80,97 @@ def get_nodes():
         print(f"Error fetching nodes: {e.stderr}")
         return []
 
+# Function to create clickable file paths
+def get_clickable_path(file_name):
+    # Get the current working directory
+    cwd = os.getcwd()
+    full_path = os.path.join(cwd, file_name)
+
+    # Use forward slashes for the URL
+    clickable_path = full_path.replace("\\", "/")  # Replace backslashes with forward slashes
+    return f'file:///{clickable_path}'  # Create the clickable file URL
+
+# Flag to control the sleep thread
+sleeping = True
+
+def countdown_display(duration):
+    global countdown_active
+    start_time = time.time()
+    while countdown_active and time.time() - start_time < duration:
+        remaining = int(duration - (time.time() - start_time))
+        print(f"\rPress 'L' for TRACE log, 'N' for NODES, or 'Q' to quit. Continue in {remaining:3d} seconds", end='', flush=True)
+        time.sleep(0.1)
+
+def handle_user_input(duration):
+    global input_active, countdown_active
+    
+    start_time = time.time()
+    while input_active and countdown_active:
+        current_time = time.time()
+        elapsed_time = current_time - start_time
+        remaining_time = max(0, duration - elapsed_time)
+        
+        if remaining_time == 0:
+            break  # Exit the loop when the countdown reaches zero
+
+        active_window = gw.getActiveWindow()
+        if active_window and 'nodes' in active_window.title.lower():
+            if keyboard.is_pressed('l'):
+                webbrowser.open(get_clickable_path(LOG_FILE))
+                for i in range(1, 16):
+                    print("\rOpening TRACE log file...", end='', flush=True)
+                    time.sleep(0.05)
+            elif keyboard.is_pressed('n'):
+                webbrowser.open(get_clickable_path(NODE_FILE))
+                for i in range(1, 16):
+                    print("\rOpening NODES log file...", end='', flush=True)
+                    time.sleep(0.05)
+            elif keyboard.is_pressed('q'):
+                for i in range(1, 16):
+                    print("\rExiting user input handling.", end='', flush=True)
+                    time.sleep(0.01)
+                input_active = False
+                countdown_active = False
+                break
+        time.sleep(0.1)
+
+    # Ensure countdown_active is set to False when exiting
+    countdown_active = False
+
+
+# Function to sleep for a specified duration and then allow user input
+def sleep_and_prompt(sleep_duration):
+    global sleeping
+    while True:
+        time.sleep(sleep_duration)
+        if sleeping:
+            print(f"\nSleep time of {sleep_duration} seconds is up. You can continue using the program.")
+
 def main():
+    sleep_seconds = sleepSeconds
+    global welcomeMsg, NODE_FILE, LOG_FILE, input_active, countdown_active
+
+    settings = load_settings()
+    welcome_message = settings.get('welcome_message', welcomeMsg)
+    print(f"Using:  {welcome_message}")
+    change = input("Do you want to change the above welcome message? (y/n): ").strip().lower()
+    update_welcome_message(change)
+    settings = load_settings()
+    welcome_message = settings.get('welcome_message', welcomeMsg)
+
     """Main function to fetch nodes, check for new ones, and run traceroute."""
     global port  # Declare that we are using the global variable
 
         # Ask the user for the connection type
     connection_type = input("Is the Meshtastic device connected via USB (C) or IP (I)? ").strip().lower()
+#    connection_type = input("Is the Meshtastic device connected via USB (C) or IP (I) or IP --traceroute (ITR)? ").strip().lower()
 
     if connection_type == 'c':
         port = find_meshtastic_port()  # This will find the COM port
     elif connection_type == 'i':
+        ip_address = input("Enter the IP address of the Meshtastic device: ")
+        port = f"--host {ip_address}"  # Set the port to the IP address
+    elif connection_type == 'itr':
         ip_address = input("Enter the IP address of the Meshtastic device: ")
         port = f"--host {ip_address}"  # Set the port to the IP address
     else:
@@ -95,7 +181,7 @@ def main():
         print("No Meshtastic device found. Please check the connection.")
         return None
 
-    print(f"Meshtastic device found: {port}")
+    print(f"Meshtastic device found?: {port}")
 
     # If port starts with '--host', it's an IP address
     if port.startswith('--host'):
@@ -108,7 +194,9 @@ def main():
     while True: 
         current_time = datetime.now()
         print(f"Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
+        print(f"Current welcome message: {welcome_message}")
+        input_active = True
+        remaining_time = sleep_seconds
         nodes_info = get_nodes_info(connection_string)
         
         if nodes_info is not None:
@@ -132,15 +220,14 @@ def main():
                             print(f"Skipping node {node_id} as it's already in the traceroute log.")
                         elif node_id not in existing_nodes:
                             print(f"New node detected: {node_id}")
-                            if port.startswith('--host'):                            
-                                    save_node(node_id, last_heard, user, deviceMetrics,current_time.strftime("%Y-%m-%d %H:%M:%S"))  # Only save the node if remote IP device
-                                    sendMsg(node_id, f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yourInviteString}",connection_string)
+                            # Run traceroute and check success  
+                            traceroute_successful = issue_traceroute(node_id,connection_string)
+                            if traceroute_successful:
+                                save_node(node_id, last_heard, user, deviceMetrics,current_time.strftime("%Y-%m-%d %H:%M:%S"))  # Only save the node if traceroute was successful
+                                sendMsg(node_id,welcome_message,connection_string)
                             else:
-                                # Run traceroute and check success  
-                                traceroute_successful = issue_traceroute(node_id,connection_string)
-                                if traceroute_successful:
-                                   save_node(node_id, last_heard, user, deviceMetrics,current_time.strftime("%Y-%m-%d %H:%M:%S"))  # Only save the node if traceroute was successful
-                                   sendMsg(node_id, f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yourInviteString}",connection_string)
+                                save_node(node_id, last_heard, user, deviceMetrics,current_time.strftime("%Y-%m-%d %H:%M:%S"))  # Only save the node if traceroute was successful
+                                sendMsg(node_id,welcome_message,connection_string)
                     else:
                         print(f"Skipping node {node_id} as it hasn't been heard from in over 2 hours.")
                 else:
@@ -149,8 +236,33 @@ def main():
         else:
             print("Failed to retrieve nodes info. Retrying in next iteration.")
 
-        print(f'Sleeping for 180 seconds from {current_time.strftime("%Y-%m-%d %H:%M:%S")}')
-        time.sleep(sleepSeconds)
+        # Print clickable paths
+        print(f"Node file: {get_clickable_path(NODE_FILE)}")
+        print(f"Trace Log file: {get_clickable_path(LOG_FILE)}")
+#        webbrowser.open(get_clickable_path(LOG_FILE))
+        #print(f'Sleeping for 180 seconds from {current_time.strftime("%Y-%m-%d %H:%M:%S")}')
+        #time.sleep(sleepSeconds)
+        #sleep_seconds = sleepSeconds  # Set your desired sleep duration
+         # Reset for the next iteration
+        input_active = True
+        countdown_active = True
+
+        # Start the countdown display in a separate thread
+        display_thread = threading.Thread(target=countdown_display, args=(sleep_seconds,), daemon=True)
+        display_thread.start()
+
+        # Handle user input in the main thread
+        handle_user_input(sleep_seconds)
+
+        # Ensure the countdown display stops
+        countdown_active = False
+        display_thread.join()
+
+
+        print(f"\nSleep time of {sleep_seconds} seconds is up. Continuing with the program.")
+
+ 
+ 
 
 if __name__ == "__main__":
     main()

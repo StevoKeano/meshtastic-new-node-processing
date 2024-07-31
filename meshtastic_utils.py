@@ -9,6 +9,39 @@ from datetime import datetime, timedelta
 timeoutSeconds = 10
 NODE_FILE = 'nodes.txt'  # File to store node IDs
 LOG_FILE = 'traceroute_log.txt'  # File to log traceroute output
+yourInviteString = "https://discord.gg/cpDFj345"  # Update this or you'll be sending MY NAME to everyone!'
+welcomeMsg =  f"Welcome to the mesh! Join us on the AustinMesh discord chat: {yourInviteString}" # default value...
+
+def load_settings():
+    global welcomeMsg
+    try:
+        with open('settings.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {"welcome_message": welcomeMsg}
+
+def update_welcome_message(change="y"):
+    global welcomeMsg
+    settings = load_settings()
+    current_message = settings.get('welcome_message',  welcomeMsg)
+    
+ #   print(f"Current welcome message: {current_message}")
+  #  change = input("Do you want to change the welcome message? (y/n): ").strip().lower()
+    
+    if change == 'y':
+        new_message = input("Enter the new welcome message: ")
+        settings['welcome_message'] = new_message
+        
+        with open('settings.json', 'w') as file:
+            json.dump(settings, file, indent=2)        
+        print("Welcome message updated successfully!")
+        return(new_message)
+    else:
+        print("Welcome message remains unchanged.")
+
+
+if __name__ == "__main__":
+    update_welcome_message()
 
 def check_meshtastic_port(port):
     command = f'{sys.executable} -m meshtastic --port {port} --info'
@@ -109,19 +142,42 @@ def issue_traceroute(node_id, connection_string):
     global python_executable
     try:
         # Prepare the command with the connection string
-        command = [sys.executable, '-m', 'meshtastic',  '--traceroute', node_id]
+        if connection_string.startswith('--host'):
+            parts = connection_string.split()
+            protocol = parts[0]
+            ip = parts[1]
+            command = [sys.executable, '-m', 'meshtastic', protocol, ip,   '--traceroute', node_id]  # remote IP
+        else:
+            command = [sys.executable, '-m', 'meshtastic',  '--traceroute', node_id] # USB Port
+
         print(f'Sending traceroute request to {node_id} (this could take a while)')
         
         # Run the traceroute command
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-       # print(result.stdout)
+        #print(f"run this ?? ...   {command}")
+        try:
+            result = None
+            result = subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
+
+        except subprocess.CalledProcessError as e:
+            print("An error occurred while running the command:")
+            print("Return code:", e.returncode)
+            print("Output:", e.output)
+            print("Error message:", e.stderr)
+
+        except FileNotFoundError:
+            print("The specified Python executable was not found. Please check the path.")
+
+        except Exception as e:
+            print("An unexpected error occurred:", str(e))
+           # print(result.stdout)
 
         # Extract the relevant traceroute line
         traceroute_line = None
-        for line in result.stdout.splitlines():
-            if ' --> ' in line:  # Check for the traceroute output format
-                traceroute_line = line.strip()
-                break
+        if result != None:
+            for line in result.stdout.splitlines():
+                if ' --> ' in line:  # Check for the traceroute output format
+                    traceroute_line = line.strip()
+                    break
 
         # If we found a valid traceroute line, log it
         if traceroute_line:
@@ -133,6 +189,8 @@ def issue_traceroute(node_id, connection_string):
             return True  # Indicate success
         else:
             print(f"No valid traceroute output for {node_id}.")
+            with open(LOG_FILE, 'a') as log_file:
+                log_file.write(f"No valid traceroute output for {node_id}.\n")  # Log the entry with timestamp
             return False  # Indicate failure
 
     except subprocess.CalledProcessError as e:
