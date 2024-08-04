@@ -35,6 +35,35 @@ countdown_active = True
 
 remaining_time = 0
 
+# Global variables
+current_window_title = ""
+
+# Initialize flags for library availability
+PYGETWINDOW_AVAILABLE = False
+XLIB_AVAILABLE = False
+
+# Try to import pygetwindow for Windows
+if platform.system() == "Windows":
+    try:
+        import pygetwindow as gw
+        PYGETWINDOW_AVAILABLE = True
+    except ImportError:
+        print("pygetwindow is not available.")
+
+# Try to import Xlib for Linux
+elif platform.system() == "Linux":
+    try:
+        from Xlib import X, display, Xatom, error
+        import Xlib.protocol.event
+        XLIB_AVAILABLE = True
+    except ImportError:
+        print("Xlib is not available.")
+
+# Import win32gui for Windows
+if platform.system() == "Windows":
+    import win32gui
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Radio connection setup")
     
@@ -138,43 +167,18 @@ def get_color_code(value, max_value):
 def countdown_display(duration):
     global countdown_active
     start_time = time.time()
-    max_remaining = sleepSeconds
+    max_remaining = duration  # Use the duration for max remaining time
     while countdown_active and time.time() - start_time < duration:
         remaining = int(duration - (time.time() - start_time))
-        #print(f"\rPress 'L' for TRACE log, 'N' for NODES, or 'Q' to quit. Continue in {remaining:3d} seconds", end='', flush=True)
+        
+        # Clear the line before printing the new message
+        print(f"\r{' ' * 80}", end='', flush=True)  # Clear the line
         color = get_color_code(remaining, max_remaining)
-        # print(f"\r{Fore.YELLOW}{Style.BRIGHT}Press 'L' for TRACE log, 'N' for NODES, or 'Q' to quit.{Style.RESET_ALL} Continue in {color}{remaining:3d}{Style.RESET_ALL} seconds", end='', flush=True)
-        # Your print statement (with 'L', 'N', and 'Q' in green)
+        
+        # Print the countdown message
         print(f"\r{Fore.YELLOW}{Style.BRIGHT}Press {Fore.GREEN}'L'{Fore.YELLOW} for TRACE log, {Fore.GREEN}'N'{Fore.YELLOW} for NODES, or {Fore.GREEN}'Q'{Fore.YELLOW} to quit.{Style.RESET_ALL} Continue in {color}{remaining:3d}{Style.RESET_ALL} seconds", end='', flush=True)
+        
         time.sleep(0.1)
-
-# Global variables
-current_window_title = ""
-
-# Initialize flags for library availability
-PYGETWINDOW_AVAILABLE = False
-XLIB_AVAILABLE = False
-
-# Try to import pygetwindow for Windows
-if platform.system() == "Windows":
-    try:
-        import pygetwindow as gw
-        PYGETWINDOW_AVAILABLE = True
-    except ImportError:
-        print("pygetwindow is not available.")
-
-# Try to import Xlib for Linux
-elif platform.system() == "Linux":
-    try:
-        from Xlib import X, display, Xatom, error
-        import Xlib.protocol.event
-        XLIB_AVAILABLE = True
-    except ImportError:
-        print("Xlib is not available.")
-
-# Import win32gui for Windows
-if platform.system() == "Windows":
-    import win32gui
 
 
 def get_active_window():
@@ -221,6 +225,67 @@ def set_window_name(display_window, new_name):
         else:
             print("pygetwindow is not available. Unable to set window name.")
     elif system == "Linux":
+        print(f"display_window type: {type(display_window)}")
+        print(f"display_window content: {display_window}")
+
+        if isinstance(display_window, str):
+            print("Warning: display_window is a string, which is not the expected format.")
+            print("Attempting to set window name using xdotool...")
+            try:
+                # Use xdotool to set the window name
+                subprocess.run(['xdotool', 'getactivewindow', 'set_window', '--name', new_name], check=True)
+                print(f"Attempted to set window name to: {new_name}")
+            except subprocess.CalledProcessError as e:
+                print(f"Error using xdotool: {e}")
+            except FileNotFoundError:
+                print("xdotool is not installed. Please install it using 'sudo apt-get install xdotool'")
+        elif XLIB_AVAILABLE:
+            try:
+                if isinstance(display_window, (list, tuple)) and len(display_window) == 2:
+                    d, window = display_window
+                elif hasattr(display_window, 'display') and hasattr(display_window, 'window'):
+                    # Alternative structure where display_window is an object with display and window attributes
+                    d, window = display_window.display, display_window.window
+                else:
+                    raise ValueError(f"Unsupported display_window structure: {display_window}")
+
+                # Change the window property
+                window.change_property(
+                    d.intern_atom('_NET_WM_NAME'),
+                    d.intern_atom('UTF8_STRING'),
+                    8,
+                    new_name.encode('utf-8')
+                )
+                d.flush()
+                print(f"Attempted to set window name to: {new_name}")
+            except Exception as e:
+                print(f"Error setting window name: {str(e)}")
+        else:
+            print("Xlib is not available and display_window is not a string. Unable to set window name.")
+    else:
+        print(f"Unsupported platform: {system}")
+    system = platform.system()
+    if system == "Windows":
+        if PYGETWINDOW_AVAILABLE:
+            try:
+                hwnd = display_window._hWnd  # Get the window handle
+                original_title = win32gui.GetWindowText(hwnd)
+                print(f"Original window title: {original_title}")
+                win32gui.SetWindowText(hwnd, new_name)
+                time.sleep(1)  # Wait a bit to ensure the change takes effect
+                updated_title = win32gui.GetWindowText(hwnd)
+                print(f"Updated window title: {updated_title}")
+                if updated_title == new_name:
+                    print("Window title successfully updated.")
+                else:
+                    print("Window title did not update as expected.")
+            except AttributeError:
+                print("Error: Unable to set window title. The window object doesn't have a '_hWnd' attribute.")
+            except Exception as e:
+                print(f"Error setting window title: {str(e)}")
+        else:
+            print("pygetwindow is not available. Unable to set window name.")
+    elif system == "Linux":
         if XLIB_AVAILABLE:
             try:
                 d, window = display_window
@@ -245,6 +310,17 @@ def update_window_title():
         current_window_title = get_active_window()
         time.sleep(0.5)
 
+def get_window_title(window):
+    if window is None:
+        return ""
+    system = platform.system()
+    if system == "Windows":
+        return window.title
+    elif system == "Linux":
+        d, w = window
+        return w.get_wm_name()
+    return ""
+
 def get_clickable_path(file_name):
     # Get the current working directory
     cwd = os.getcwd()
@@ -255,28 +331,42 @@ def get_clickable_path(file_name):
     return clickable_path
 
 def handle_user_input(duration):
-    global input_active, countdown_active, current_window_title
-    
+    global input_active, countdown_active
+    input_active = True
+    countdown_active = True
+  #  print(f"Entered handle_user_input with duration: {duration}")
+
     def on_press(key):
         global input_active, countdown_active
+        # print(f"Key pressed: {key}")
         try:
-            if current_window_title and 'K3ANO':
-                if key.char.lower() == 'l':
-                    webbrowser.open(get_clickable_path(LOG_FILE))
-                    print("\rOpening TRACE log file...", end='', flush=True)
-                elif key.char.lower() == 'n':
-                    webbrowser.open(get_clickable_path(NODE_FILE))
-                    print("\rOpening NODES log file...", end='', flush=True)
-                elif key.char.lower() == 'q':
-                    print("\rExiting user input handling.", end='', flush=True)
-                    input_active = False
-                    countdown_active = False
-                    return False  # Stop listener
-        except AttributeError:
-            pass  # Ignore special keys
+            active_window = get_active_window()
+            window_title = get_window_title(active_window)
+ #           print(f"Current window title: {window_title}")
+
+            if hasattr(key, 'char') and key.char is not None:
+                if 'K3ANO' in window_title:
+                    if key.char.lower() == 'l':
+                        webbrowser.open(get_clickable_path(LOG_FILE))
+                        print("\rOpening TRACE log file...", end='', flush=True)
+                    elif key.char.lower() == 'n':
+                        webbrowser.open(get_clickable_path(NODE_FILE))
+                        print("\rOpening NODES log file...", end='', flush=True)
+                    elif key.char.lower() == 'q':
+                        print("\rExiting user input handling.", end='', flush=True)
+                        input_active = False
+                        countdown_active = False
+                        return False  # Stop listener
+#                else:
+ #                   print("Not in K3ANO window, ignoring key press")
+  #          else:
+   #             print("Special key pressed, ignoring...")
+        except Exception as e:
+            print(f"Error handling key press: {e}")
 
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
+    # note to reviewer "Keyboard listener started so you can open log files while in newNodes window"
 
     start_time = time.time()
     while input_active and countdown_active:
@@ -284,7 +374,10 @@ def handle_user_input(duration):
         elapsed_time = current_time - start_time
         remaining_time = max(0, duration - elapsed_time)
         
+       # print(f"Elapsed time: {elapsed_time:.2f}s, Remaining time: {remaining_time:.2f}s")
+
         if remaining_time == 0:
+          #  print("Countdown reached zero, exiting loop")
             break  # Exit the loop when the countdown reaches zero
 
         time.sleep(0.1)
@@ -292,6 +385,7 @@ def handle_user_input(duration):
     # Ensure countdown_active is set to False when exiting
     countdown_active = False
     listener.stop()
+
 
 # Start the window title update thread
 # threading.Thread(target=update_window_title, daemon=True).start()
@@ -302,7 +396,7 @@ def sleep_and_prompt(sleep_duration):
     while True:
         time.sleep(sleep_duration)
         if sleeping:
-            print(f"\nSleep time of {sleep_duration} seconds is up. You can continue using the program.")
+            print(f"\nSleep time of {sleep_duration} seconds is up.")
 
 def main():
     global port, welcomeMsg, NODE_FILE, LOG_FILE, input_active, countdown_active, sleepSeconds
@@ -419,7 +513,7 @@ def main():
 
         input_active = True
         countdown_active = True
-
+        # print('call countdown_display as target of a thread...')
         display_thread = threading.Thread(target=countdown_display, args=(sleep_seconds,), daemon=True)
         display_thread.start()
 
