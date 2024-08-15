@@ -7,6 +7,7 @@ common_dependencies = [
     'pyserial',
     'pynput',
     'pyfiglet',
+    'bleak',  
 ]
 
 # Platform-specific dependencies
@@ -43,8 +44,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'K3ANO_NewNodes=K3ANO_NewNode.newNode:main',
-            'K3ANO-NewNodes=K3ANO_NewNode.newNode:main',
+            'K3ANO_NewNodes=K3ANO_NewNodes.newNode:main',
+            'K3ANO-NewNodes=K3ANO_NewNodes.newNode:main',
             'NewNodes=K3ANO_NewNodes.newNode:main',
         ],
     },

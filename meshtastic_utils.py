@@ -319,7 +319,7 @@ def get_nodes_info(connection_string):
     nodes_info = []  # Initialize nodes_info at the start
 
     try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=45)
         
         # Attempt to parse the output as JSON
         start_index = result.stdout.find("Nodes in mesh:")
